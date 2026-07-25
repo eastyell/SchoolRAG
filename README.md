@@ -1,4 +1,4 @@
-#### 一个基于 LangChain 的 RAG 系统，用于学校智能问答
+#### 基于 LangChain 的 RAG 系统，用于学校智能问答
 功能：
     1. 使用 Chroma 向量库和 ZhipuAi 模型实现问答
     2. 支持文件上传到Chroma 向量库
