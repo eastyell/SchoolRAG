@@ -10,8 +10,10 @@
         3. 修复：历史消息无截断 —— 限制保留最近10条消息
     修改时间：2026-07-26
         1. 新增：日期查询工具，支持LLM自主调用
-        2. 重构：RAG链改为Agent架构，LLM自主决定调用知识库检索或日期工具
+        2. 重构：RAG链改为Agent架构，LLM自主决定调用知识库检索或日期工具(V_0.3)
         3. 修复：弃用 AgentExecutor + RunnableWithMessageHistory，改用 bind_tools 手动管理
+    修改时间：2026-07-28
+            1. 新增：邮件发送工具，支持LLM自主调用
 '''
 
 import os
@@ -33,7 +35,8 @@ from langchain_core.messages import (
     AIMessage, ToolMessage, HumanMessage, SystemMessage
 )
 
-import models
+
+import models, functionTools
 from uploadRouter import router as upload_router
 from manageRouter import router as manage_router
 
@@ -74,14 +77,25 @@ def search_knowledge_base(query: str) -> str:
         return "未在知识库中找到相关内容。"
     return "\n\n".join(doc.page_content for doc in docs)
 
+@tool
+def send_email(to: str, subject: str, body: str) -> str:
+    """发送电子邮件。当用户要求发邮件、发送通知、邮件通知某人时，调用此工具。
+    参数：
+    - to: 收件人邮箱地址（必填）
+    - subject: 邮件主题（必填）
+    - body: 邮件正文内容（必填）
+    """
+    functionTools.send_email(to,subject,body)
+
 
 # 工具列表
-tools = [get_current_date, search_knowledge_base]
+tools = [get_current_date, search_knowledge_base, send_email]
 
 # 工具映射（用于手动执行工具调用）
 tool_map = {
     "get_current_date": get_current_date,
     "search_knowledge_base": search_knowledge_base,
+    "send_email": send_email
 }
 
 # 绑定工具到 LLM
@@ -127,11 +141,17 @@ SYSTEM_PROMPT = """你是一个学校的智能问答助手。你可以使用以�
 
 1. get_current_date - 查询当前日期和时间
 2. search_knowledge_base - 在学校知识库中搜索信息
+3, send_email - 发送邮件
 
 请根据用户的问题自主判断需要调用哪个工具：
 - 如果用户问的是日期、时间相关的问题，调用 get_current_date
 - 如果用户问的是学校相关的问题，调用 search_knowledge_base
-- 如果两者都需要，可以依次调用多个工具
+- 当用户要求“发邮件”时，你**必须**调用 `send_email` 工具。绝对不允许直接用文字回复“已发送”或产生幻觉！
+- 调用 `send_email` 前，检查是否具备三个参数：收件人邮箱(to)、主题(subject)、正文(body)。
+- 如果用户提供的信息不完整（例如只说了“发邮件给张三”，没给邮箱地址或正文），你**必须先追问用户**补充信息，不要盲目调用工具。
+- 发送邮件前，向用户确认收件人、主题和正文内容，确保无误后再发送，调用 `send_email` 工具。
+- 如果用户想把查询学校相关的问题的结果，通过邮件发送出去，请先确认发送的内容，等待用户确认后，调用 `send_email` 工具发送邮件。
+- 如果三者都需要，可以依次调用多个工具
 
 回答规则：
 - 如果知识库中没有相关信息，请直接回答"抱歉，我的知识库中暂时没有关于这个问题的信息。"，不要编造答案
@@ -299,7 +319,7 @@ async def get_web_ui():
             <div class="messages" id="messages">
                 <div class="message bot">
                     <span class="agent-tag">🏫 学校客服</span><br>
-                    你好！我是学校智能助手，你可以问我关于学校规章制度、课程安排等问题，也可以问我今天几号。我具备短期记忆，可以进行多轮对话哦！
+                    你好！我是学校智能助手，你可以问我关于学校规章制度、课程安排等问题，也可以把查询结果发送邮件给你。我具备短期记忆，可以进行多轮对话哦！
                 </div>
             </div>
             <div class="input-area">
@@ -332,7 +352,7 @@ async def get_web_ui():
                 sendBtn.disabled = true;
 
                 const loadingId = 'loading-' + Date.now();
-                appendMessage('<em>正在思考中...</em>', 'bot', loadingId, true);
+                appendMessage('<em>正在查询中，请稍等...</em>', 'bot', loadingId, true);
 
                 try {
                     const response = await fetch('/api/chat', {
