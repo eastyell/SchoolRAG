@@ -14,8 +14,9 @@ from email import encoders
 import smtplib
 from email.header import Header
 from dotenv import load_dotenv
-import os
-import functionTools
+import os, json
+import requests
+import pandas as pd
 
 # 加载根目录下的 .env 文件
 load_dotenv()
@@ -26,6 +27,10 @@ port = os.getenv('SMTP_PORT', '25')
 user = os.getenv("SENDER_EMAIL", "eastyell@163.com")
 password = os.getenv("SENDER_PASSWORD", "")
 cc_email = "eastyell@163.com" # 抄送邮箱
+# 加载城市编码,用于天气查询
+city_df = pd.read_excel('./school_docs/city.xlsx')
+# 加载快递公司编码
+express_df = pd.read_excel('./school_docs/express.xlsx')
 
 # 发送邮件
 def send_email(tostr, subject, body, files_path=[]):
@@ -84,7 +89,98 @@ def send_email(tostr, subject, body, files_path=[]):
         print("❌ 发送邮件时发生异常：{}".format(e))
         return f"❌ 邮件发送失败：{str(e)}"
 
+def get_city_code(city: str) -> str:
+    '''
+      获取城市编码
+
+    '''
+    # 优先匹配区县
+    match = city_df[city_df['district'] == city]
+    if not match.empty:
+        return match.iloc[0]['areacode/城市ID']
+    # 匹配城市
+    match = city_df[city_df['city'] == city]
+    if not match.empty: 
+        return match.iloc[0]['areacode/城市ID']
+    # 匹配省份
+    match = city_df[city_df['city'].str.contains(city,na=False)]   
+    if not match.empty: 
+        return match.iloc[0]['areacode/城市ID']
+    # 默认上海
+    return 101021500
+
+def get_express_code(express_name: str) -> str:
+    '''
+      获取快递编码
+
+    '''
+    match = express_df[express_df['cpName'].str.contains(express_name,na=False)] 
+    if not match.empty:
+        return match.iloc[0]['cpCode']
+    return ''
+    
+
+# 实时获取天气
+def get_weather(city: str) -> str:
+    '''
+      调用实时天气API，获取指定城市的天气情况
+      参数city为城市名称
+      返回值：温度计天气状况
+
+    '''
+
+    url = "https://eolink.o.apispace.com/456456/weather/v001/now"
+
+    city_code = get_city_code(city)
+
+    payload = {"areacode" : city_code}
+
+    headers = {
+        "X-APISpace-Token":"mia3bbgxftixriau80ffiq1gvy6b9w11"
+    }
+
+    response = requests.request("GET", url, params=payload, headers=headers)
+
+    data = response.json()
+
+    temp = data.get('result').get('realtime').get('temp')
+
+    wd = data.get('result').get('realtime').get('text')
+
+    print(response.text)
+
+    return f"{city}今日天气：{wd}，温度：{temp}"
+
+
+# 实时快递查询
+def get_package(express_name, tracking_number: str) -> str:
+    '''
+      调用物流API，获取快递的物流状态
+      参数express_name为快递公司名称
+      参数mail_No为快递单号
+      返回值：快递的物流状态
+
+    '''    
+
+    express_code = get_express_code(express_name)
+
+    url = "https://eolink.o.apispace.com/wlgj1/paidtobuy_api/trace_search"
+
+    if express_code == '':
+        return '快递公司不存在，请核实快递公司名称！' 
+    payload = {"cpCode":express_code,"mailNo":tracking_number}
+
+    headers = {
+        "X-APISpace-Token":"mia3bbgxftixriau80ffiq1gvy6b9w11",
+        "Content-Type":"application/json"
+    }
+
+    response=requests.request("POST", url, data=json.dumps(payload), headers=headers)
+
+    return(response.text)
 
 
 if __name__ == "__main__":
-    send_email(user, '测试邮件','这是一封测试邮件')
+    # send_email(user, '测试邮件','这是一封测试邮件')
+    # print(get_weather('北京'))
+    print(get_package('圆通', 'YT3762450943697'))

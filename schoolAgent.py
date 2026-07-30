@@ -68,8 +68,27 @@ def get_current_date(query: str = "") -> str:
     weekday = weekdays[now.weekday()]
     return f"今天是{now.year}年{now.month}月{now.day}日，{weekday}。当前时间{now.hour}:{now.minute:02d}。"
 
+@tool
+def get_weather(city: str) -> str:
+    """
+    查询指定城市的天气情况。当用户询问天气、温度、是否下雨、穿什么衣服等问题时，调用此工具。参数city为城市名称。
+    
+    """
+    weacher =  functionTools.get_weather(city)
+    return weacher
 
 @tool
+def track_package(express_name, tracking_number: str) -> str:
+    """
+    查询快递物流信息。当用户询问快递到哪了、物流进度、包裹状态等问题时，调用此工具。
+    参数 express_name为快递公司名称, tracking_number为快递单号。
+    
+    """
+    package =  functionTools.get_package(express_name, tracking_number)
+    return package
+
+    
+@tool  # 使用@tool装饰器标记此函数为一个工具
 def search_knowledge_base(query: str) -> str:
     """在学校知识库中搜索相关信息。当用户询问学校规章制度、课程安排、招生信息、专业设置、校园生活等学校相关问题时，调用此工具。"""
     docs = retriever.invoke(query)
@@ -89,11 +108,13 @@ def send_email(to: str, subject: str, body: str) -> str:
 
 
 # 工具列表
-tools = [get_current_date, search_knowledge_base, send_email]
+tools = [get_current_date, get_weather, track_package, search_knowledge_base, send_email]
 
 # 工具映射（用于手动执行工具调用）
 tool_map = {
     "get_current_date": get_current_date,
+    "get_weather": get_weather,
+    "track_package": track_package,
     "search_knowledge_base": search_knowledge_base,
     "send_email": send_email
 }
@@ -140,11 +161,15 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
 SYSTEM_PROMPT = """你是一个学校的智能问答助手。你可以使用以下工具来回答用户的问题：
 
 1. get_current_date - 查询当前日期和时间
-2. search_knowledge_base - 在学校知识库中搜索信息
-3, send_email - 发送邮件
+2. get_weather - 查询指定城市的天气情况
+3. track_package - 查询快递物流信息
+4. search_knowledge_base - 在学校知识库中搜索信息
+5, send_email - 发送邮件
 
 请根据用户的问题自主判断需要调用哪个工具：
 - 如果用户问的是日期、时间相关的问题，调用 get_current_date
+- 如果用户问的是天气情况，调用 get_weather
+- 如果用户问的是快递物流信息，调用 track_package
 - 如果用户问的是学校相关的问题，调用 search_knowledge_base
 - 当用户要求“发邮件”时，你**必须**调用 `send_email` 工具。绝对不允许直接用文字回复“已发送”或产生幻觉！
 - 调用 `send_email` 前，检查是否具备三个参数：收件人邮箱(to)、主题(subject)、正文(body)。
@@ -312,14 +337,14 @@ async def get_web_ui():
     <body>
         <div class="chat-container">
             <div class="header">
-                <div class="header-title">🎓 上海工业技术学校智能问答系统 (V_0.3)</div>
+                <div class="header-title">🎓 上海工业技术学校智能问答系统 (V_0.4)</div>
                 <div class="header-info">🏫 学校客服 · 招生政策 · 课程安排 · 校规制度</div>
                 <button class="clear-btn" onclick="clearChat()">🧹 新对话</button>
             </div>
             <div class="messages" id="messages">
                 <div class="message bot">
                     <span class="agent-tag">🏫 学校客服</span><br>
-                    你好！我是学校智能助手，你可以问我关于学校规章制度、课程安排等问题，也可以把查询结果发送邮件给你。我具备短期记忆，可以进行多轮对话哦！
+                    你好！我是学校智能助手，你可以问我关于学校规章制度、课程安排等问题，也可以把查询结果发送邮件给你或者查天气和快递哦！
                 </div>
             </div>
             <div class="input-area">
